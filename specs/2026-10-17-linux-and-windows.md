@@ -1,8 +1,8 @@
 # Linux and Windows: research for feature parity
 
 `2026-10-17` · research, then implemented the same day · status:
-implemented on Linux and Windows, Windows untested beyond CI (see "Pending
-manual checks")
+implemented and set up for release as 0.3.0, with Windows and Linux as an
+unsigned preview; Windows untested beyond CI (see "Pending manual checks")
 
 ## Question
 
@@ -250,6 +250,14 @@ Google." The open-source build swaps in a dummy logger, but Google publishes no
 binaries of it. Shipping the prebuilt library would break Tafel's promise that
 it never reaches the public internet, so the user chose option B.
 
+Distribution, decided later the same day: Windows and Linux ship as a
+preview from the same release as macOS. The Windows installer is not signed
+for now; the site and release notes explain the SmartScreen warning. Signing
+can follow, for example through the SignPath Foundation, which requires an
+existing release. Individual developers outside the US and Canada cannot use
+Azure Artifact Signing. There is no auto-updater, because an update check
+would contact a server.
+
 ## Implementation
 
 - **Models.** `src-tauri/models/` holds the two models as ONNX with float16
@@ -295,18 +303,36 @@ it never reaches the public internet, so the user chose option B.
   Windows it keeps images out of the roaming profile. Settings stay in
   `app_data_dir()`.
 - **Packaging.** Linux `.deb` (depends on `gstreamer1.0-plugins-good`) and
-  AppImage (bundles the media framework); Windows NSIS installer. Nothing is
-  signed yet, and the release workflow and site still ship macOS only.
+  AppImage (bundles WebKitGTK, GTK and GStreamer with the V4L2 and PipeWire
+  camera plugins); Windows NSIS installer, not signed.
+- **Release.** `.github/workflows/release.yml` builds macOS (signed and
+  notarized, as before), Linux (on Ubuntu 22.04, so older distributions can
+  run it; the AppImage bundler needs `patchelf` and the GStreamer plugins
+  installed) and Windows from a version tag, then one job publishes the
+  release with `Tafel.dmg`, `Tafel-Setup.exe`, `Tafel.AppImage`, `Tafel.deb`
+  and `SHA256SUMS.txt`, with a release note on the unsigned Windows build.
+  Pull requests that touch the workflow or the Linux and Windows bundle
+  settings, and manual runs, build the Windows and Linux packages without
+  publishing. The version is 0.3.0 in `tauri.conf.json`, `Cargo.toml` and
+  `package.json`.
 - **CI.** `.github/workflows/ci.yml` runs `npm test`, `npm run build` and
   `cargo test` on Ubuntu 24.04, Windows 2025 and macOS 15. On Linux and
   Windows it downloads MediaPipe's public thumbs-up photo (SHA-256 pinned) as
   `fixtures/hand.jpg`, so the hand test runs on a real hand.
 - **Docs.** README, DESIGN.md, and AGENTS.md, which gains a boundary: do not
   use MediaPipe's runtime.
-- **Site.** `site/index.html` says Windows and Linux are in testing (hero
-  fine print, link-preview description, FAQ) and "your computer" where it
-  said "your Mac". The download stays macOS-only until releases include
-  other platforms; the site deploys only when this reaches `main`.
+- **Site.** The hero shows the download for the visitor's system (from the
+  user agent; macOS by default, including on phones), with "All downloads"
+  linking to the install step, which lists macOS, Windows (preview, with how
+  to get past SmartScreen) and Linux (preview, AppImage and `.deb`) plus the
+  checksums. GoatCounter counts each file separately. The FAQ says Windows
+  and Linux are a preview and suggests one or two cameras there; "your Mac"
+  became "your computer" where the claim holds everywhere.
+- **Network-camera URL.** The Rust `Camera` in `settings.rs` now keeps an
+  optional `url`, so a network camera survives saving settings and a
+  restart. Older files load unchanged, and local cameras store no `url`.
+- **Empty state.** The "no cameras" hint mentions Continuity Camera only on
+  macOS.
 
 ## Verification of the implementation (Linux, this container)
 
@@ -338,6 +364,17 @@ it never reaches the public internet, so the user chose option B.
 - `npm run tauri build -- --bundles deb`: a 14.2 MB package, 35.7 MB
   installed, depending on `gstreamer1.0-plugins-good`, `libwebkit2gtk-4.1-0`
   and `libgtk-3-0`.
+- `npm run tauri build -- --bundles appimage` (Ubuntu 24.04 here; the release
+  builds on 22.04): 102 MB, with the V4L2 and PipeWire GStreamer plugins
+  inside. Started under Xvfb, it showed the full UI, answered MCP
+  `get_tafel_status`, and its camera request reached GStreamer's device
+  enumeration (no devices in this container) instead of being refused. The
+  first attempt failed until `patchelf` was installed.
+- Site: rendered with macOS, Windows, Linux and Android user agents; each
+  desktop sees its own download button, Android sees macOS, and nothing
+  scrolls sideways at 1280 or 390 px.
+- `cargo test` after the URL fix: 73 passed, including the new
+  `network_camera_url_survives_restart`.
 
 CI on `acb83ae` passed on all three platforms. Windows ran the 72 Rust
 tests, including the hand test on the thumbs-up photo through the Rust port;
@@ -359,36 +396,31 @@ when nothing calls them, so `swift-rs` is now a macOS-only build dependency.
   triggers from pen grips now that joints carry no confidence of their own.
 - CPU load with two or three cameras at 10 fps on typical laptops.
 - Whether the Linux Claude Desktop beta renders the MCP card.
-- Before a Windows or Linux release: the site's FAQ says up to four cameras
-  run smoothly, which was measured on a Mac with Vision.
-
-## Found along the way, not fixed here
-
-Network cameras lose their URL when settings are saved. The Rust `Camera` in
-`src-tauri/src/settings.rs` has no `url` field, so `set_settings` drops it,
-and after a restart the camera no longer counts as a network camera. The fix
-is an optional `url` field with
-`#[serde(default, skip_serializing_if = "Option::is_none")]`. It affects
-every platform and is left for a separate change.
+- How many cameras run smoothly on Windows and Linux: the site suggests one
+  or two there, a guess from the speed measured here.
 
 ## Next steps
 
-1. Watch CI on all three platforms and fix what it finds.
-2. Run the pending manual checks.
+1. Run the pending manual checks, at least Windows with a real webcam,
+   before tagging.
+2. Release: merge, then push the `v0.3.0` tag straight away. The site
+   deploys on merge, and its Windows and Linux links work only once the
+   release has published, which takes as long as the slowest of the three
+   builds.
 3. Parity harness: record JPEG sequences of each gesture and of pen grips
    from real cameras (local and untracked), run both backends on a Mac, where
    rten runs too, and tune thresholds if the fire sequences differ.
 4. If CPU load is too high: track hands between frames to skip the palm
    detector, or detect less often while no hand is in view.
-5. Release: Windows signing and distribution decisions, a release matrix,
-   per-OS links on the site.
+5. Windows signing (SignPath Foundation, a company identity for Azure
+   Artifact Signing, or a certificate), and a universal macOS build so Intel
+   Macs can run the download.
 
 ## Remaining open decisions
 
-1. Order of manual testing: Windows first (more users, Chromium's camera
-   stack) or Linux first.
-2. Distribution: Linux formats beyond `.deb` and AppImage, and the Windows
-   signing route.
+1. The Windows signing route, and when.
+2. Linux formats beyond `.deb` and AppImage (Flathub needs camera-portal
+   work).
 
 ## Sources
 

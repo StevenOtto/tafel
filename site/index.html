@@ -47,7 +47,7 @@
     />
     <meta
       property="og:description"
-      content="Draw on paper, give a thumbs up, and your AI agent builds what you sketched. For macOS, with Windows and Linux in testing."
+      content="Draw on paper, give a thumbs up, and your AI agent builds what you sketched. For macOS, Windows and Linux."
     />
     <meta
       property="og:image"
@@ -290,6 +290,9 @@
       .button--solid {
         background: var(--ink);
         color: var(--paper);
+      }
+      .button[hidden] {
+        display: none;
       }
       .fine {
         font-size: var(--step--1);
@@ -966,6 +969,19 @@
         color: var(--muted);
         max-width: 65ch;
       }
+      .downloads {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 8px;
+        color: var(--muted);
+        max-width: 65ch;
+      }
+      .downloads strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
       .code {
         position: relative;
         margin-top: 10px;
@@ -1398,12 +1414,32 @@
             <div class="actions">
               <a
                 class="button button--solid"
+                data-os="macos"
                 data-goatcounter-click="download-macos"
                 href="https://github.com/StevenOtto/tafel/releases/latest/download/Tafel.dmg"
                 >Download for macOS</a
               >
+              <a
+                class="button button--solid"
+                data-os="windows"
+                data-goatcounter-click="download-windows"
+                href="https://github.com/StevenOtto/tafel/releases/latest/download/Tafel-Setup.exe"
+                hidden
+                >Download for Windows</a
+              >
+              <a
+                class="button button--solid"
+                data-os="linux"
+                data-goatcounter-click="download-linux-appimage"
+                href="https://github.com/StevenOtto/tafel/releases/latest/download/Tafel.AppImage"
+                hidden
+                >Download for Linux</a
+              >
               <a class="button" href="#examples">See examples</a>
-              <span class="fine">Windows and Linux in testing</span>
+              <span class="fine"
+                >macOS, Windows and Linux (preview) ·
+                <a href="#install">All downloads</a></span
+              >
             </div>
           </section>
 
@@ -1536,9 +1572,48 @@
             <ol class="steps">
               <li>
                 <h3>Download the app</h3>
-                <p>
-                  Open the disk image and drag Tafel to Applications. Allow
-                  camera access when macOS asks.
+                <ul class="downloads">
+                  <li>
+                    <strong>macOS.</strong> Open the
+                    <a
+                      data-goatcounter-click="download-macos"
+                      href="https://github.com/StevenOtto/tafel/releases/latest/download/Tafel.dmg"
+                      >disk image</a
+                    >
+                    and drag Tafel to Applications. Allow camera access when
+                    macOS asks.
+                  </li>
+                  <li>
+                    <strong>Windows (preview).</strong> Run the
+                    <a
+                      data-goatcounter-click="download-windows"
+                      href="https://github.com/StevenOtto/tafel/releases/latest/download/Tafel-Setup.exe"
+                      >installer</a
+                    >. It is not signed yet, so Windows may say it protected
+                    your PC: choose More info, then Run anyway.
+                  </li>
+                  <li>
+                    <strong>Linux (preview).</strong> Make the
+                    <a
+                      data-goatcounter-click="download-linux-appimage"
+                      href="https://github.com/StevenOtto/tafel/releases/latest/download/Tafel.AppImage"
+                      >AppImage</a
+                    >
+                    executable and open it, or install the
+                    <a
+                      data-goatcounter-click="download-linux-deb"
+                      href="https://github.com/StevenOtto/tafel/releases/latest/download/Tafel.deb"
+                      >.deb</a
+                    >
+                    on Ubuntu or Debian.
+                  </li>
+                </ul>
+                <p class="fine">
+                  <a
+                    href="https://github.com/StevenOtto/tafel/releases/latest/download/SHA256SUMS.txt"
+                    >Checksums</a
+                  >
+                  for every download.
                 </p>
               </li>
               <li>
@@ -1629,12 +1704,12 @@
               <details>
                 <summary>Does Tafel run on Windows or Linux?</summary>
                 <p>
-                  Not as a download yet. Windows and Linux versions are in
-                  testing, with the same gestures, cameras and agent connection.
-                  There, Tafel finds your hands with Google's MediaPipe hand
-                  models, run inside the app, so detection stays on your
-                  computer just as it does on a Mac. For now, the download is
-                  for macOS only.
+                  Yes, as a preview, with the same gestures, cameras and agent
+                  connection. The Windows installer is not signed yet, so
+                  Windows may say it protected your PC: choose More info, then
+                  Run anyway. On Windows and Linux, Tafel finds your hands with
+                  Google's MediaPipe hand models, run inside the app, so
+                  detection stays on your computer just as it does on a Mac.
                 </p>
               </details>
               <details>
@@ -1643,7 +1718,8 @@
                   No. The built-in camera works, though a camera looking down at
                   the desk works best. On a Mac, an iPhone on a desk stand
                   through Continuity Camera is a good setup. Up to four cameras
-                  run smoothly.
+                  run smoothly on a Mac. On Windows and Linux, hand detection
+                  takes more processor time, so start with one or two.
                 </p>
               </details>
               <details>
@@ -1689,6 +1765,22 @@
 
     <script>
       (() => {
+        /* Offer the download for the visitor's own system. macOS is the
+           default, also on phones: Tafel is installed on a computer. */
+        const agent = navigator.userAgent;
+        const os = /Windows/.test(agent)
+          ? "windows"
+          : /Linux/.test(agent) && !/Android/.test(agent)
+            ? "linux"
+            : null;
+        if (os) {
+          for (const button of document.querySelectorAll(
+            ".actions [data-os]",
+          )) {
+            button.hidden = button.dataset.os !== os;
+          }
+        }
+
         /* Photos: sharpened WebP in two widths. A tiny blurred copy is the
            image's background, so it shows until the real image loads. */
         const PREVIEWS = {
