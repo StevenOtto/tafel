@@ -44,6 +44,7 @@ import {
   openCollection,
 } from "../core/delivery";
 import { Gesture, Hand } from "../core/hand";
+import { platformFromUserAgent } from "../core/platform";
 import {
   Session,
   byRecentActivity,
@@ -113,6 +114,9 @@ const GUIDE: readonly {
 ];
 
 const NO_GESTURES: readonly Gesture[] = [];
+
+/** Continuity Camera exists only on macOS; elsewhere the hints leave it out. */
+const ON_MAC = platformFromUserAgent(navigator.userAgent) === "macos";
 
 /** The inline name field: naming the current session, or starting a new one. */
 interface SessionDraft {
@@ -977,9 +981,13 @@ export const ControlApp = (): React.JSX.Element => {
             <div className="control__empty">
               <p>No cameras yet.</p>
               <p className="control__hint">
-                {available.length > 0
-                  ? "Add one from the menu above — your desk, a wall camera, an iPhone via Continuity Camera."
-                  : "Connect a camera (or an iPhone via Continuity Camera) to begin."}
+                {ON_MAC
+                  ? available.length > 0
+                    ? "Add one from the menu above — your desk, a wall camera, an iPhone via Continuity Camera."
+                    : "Connect a camera (or an iPhone via Continuity Camera) to begin."
+                  : available.length > 0
+                    ? "Add one from the menu above."
+                    : "Connect a camera to begin."}
               </p>
             </div>
           ) : (
