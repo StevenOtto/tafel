@@ -335,9 +335,16 @@ it never reaches the public internet, so the user chose option B.
   installed, depending on `gstreamer1.0-plugins-good`, `libwebkit2gtk-4.1-0`
   and `libgtk-3-0`.
 
+CI on `acb83ae` passed on all three platforms. Windows ran the 72 Rust
+tests, including the hand test on the thumbs-up photo through the Rust port;
+macOS ran 66, including the Apple Vision tests through the Swift bridge (the
+hand photo is fetched only on Linux and Windows). The first Windows run failed
+to link `build.rs`: MSVC requires `swift-rs`'s Swift runtime symbols even
+when nothing calls them, so `swift-rs` is now a macOS-only build dependency.
+
 ## Pending manual checks
 
-- Windows: nothing has run there beyond CI. Needs a real camera, the
+- Windows: nothing has run there beyond CI's tests. Needs a real camera, the
   permission handler (no WebView2 prompt expected), styling, and the NSIS
   installer.
 - Linux with a real webcam through GStreamer (V4L2 or PipeWire), several
