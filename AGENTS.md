@@ -1,6 +1,6 @@
 # Tafel
 
-Desktop app (macOS; Linux and Windows builds are new and unreleased) that
+Desktop app (macOS; Linux and Windows builds are a preview) that
 turns desk-camera images into visual input for agents. Hand gestures trigger
 deliveries; a local MCP server serves them. Sessions persist images on this
 computer. OCR and the earlier UI-generation pipeline were removed; do not

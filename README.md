@@ -13,8 +13,9 @@ outbound path is fetching frames from a network camera you add, and only ever
 to a host on your local network (loopback, private, or `.local`) — enforced
 in Rust; the app never reaches the public internet.
 
-Runs on macOS 12+. Linux and Windows builds are new and not released yet;
-see `specs/2026-10-17-linux-and-windows.md` for what has been verified.
+Runs on macOS 12+. Linux and Windows builds are a preview, and the Windows
+installer is not signed yet; see `specs/2026-10-17-linux-and-windows.md` for
+what has been verified.
 
 See `DESIGN.md` for the architecture and `specs/` for the dated specs behind
 each change (on-device OCR was added in August and removed again in
@@ -122,13 +123,18 @@ as a network camera instead.
   (camera access), then notarizes and staples the app. Check with
   `spctl -a -vvv -t exec` on the app and `xcrun stapler validate` on app and DMG.
 
-- Releases: pushing a tag such as `v0.2.0` runs
-  `.github/workflows/release.yml` on a macOS runner. It checks the tag
-  matches the version in `src-tauri/tauri.conf.json`, signs and notarizes
-  the app and the DMG, and attaches the DMG to a GitHub release as
-  `Tafel.dmg`. Bump the version first, then tag:
-  `git tag v0.2.0 && git push origin v0.2.0`. The workflow needs these
-  repository secrets:
+- Releases: pushing a tag such as `v0.3.0` runs
+  `.github/workflows/release.yml`. It checks the tag matches the version in
+  `src-tauri/tauri.conf.json`, then builds on macOS, Windows and Linux
+  runners: the signed and notarized `Tafel.dmg`, an unsigned
+  `Tafel-Setup.exe`, and `Tafel.AppImage` and `Tafel.deb` (built on Ubuntu
+  22.04 for older distributions). Once all three succeed it publishes one
+  GitHub release with those files and `SHA256SUMS.txt`, under the stable
+  names the website links to. Pull requests that change the workflow or the
+  Linux and Windows bundle settings, and manual runs, build the Windows and
+  Linux packages as workflow artifacts without publishing. Bump the version
+  first, then tag: `git tag v0.3.0 && git push origin v0.3.0`. The workflow
+  needs these repository secrets, all for the macOS build:
 
   | Secret                       | Value                                                              |
   | ---------------------------- | ------------------------------------------------------------------ |
@@ -146,7 +152,10 @@ as a network camera instead.
   it with `python3 -m http.server --directory site` and open
   `http://localhost:8000`. `.github/workflows/pages.yml` deploys it to
   GitHub Pages on every push to `main` that touches `site/`. The
-  download button links to `releases/latest/download/Tafel.dmg`. Files in
+  download button links to `releases/latest/download/` plus the file name for
+  the visitor's system (macOS by default), and the install steps link every
+  file. Merge site changes that link new files only together with a release
+  that contains them. Files in
   `site/examples/` are agent-made example pages and media, kept as they
   were made.
 

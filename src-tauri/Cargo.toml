@@ -1,6 +1,6 @@
 [package]
 name = "tafel"
-version = "0.2.0"
+version = "0.3.0"
 description = "Desk camera as visual input for agents"
 authors = ["Steven Otto"]
 edition = "2021"
