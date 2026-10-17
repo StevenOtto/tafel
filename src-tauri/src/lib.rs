@@ -1,6 +1,3 @@
-#[cfg(not(target_os = "macos"))]
-compile_error!("Tafel is macOS-only: hand detection runs on Apple Vision.");
-
 mod bus;
 mod mcp_server;
 mod netcam;
@@ -92,8 +89,9 @@ fn report_delivery(
         .publish_delivery(now_ms(), kind, trigger, snapshots, skipped_cameras))
 }
 
-/// Hand-pose landmarks for one camera frame (JPEG). Runs on-device through
-/// Apple Vision; classification happens in the webview.
+/// Hand-pose landmarks for one camera frame (JPEG). Runs on the machine:
+/// Apple Vision on macOS, MediaPipe's models elsewhere. Classification
+/// happens in the webview.
 #[tauri::command]
 async fn detect_hands(jpeg_b64: String) -> Result<vision::Detection, String> {
     let jpeg = decode_b64(&jpeg_b64)?;
@@ -288,14 +286,42 @@ fn forward<T: serde::Serialize + Clone + Send + 'static>(
     });
 }
 
+/// Linux and Windows build the control window here instead of from
+/// tauri.conf.json (their platform config sets `create: false`) so that it
+/// can grant the camera: WebKitGTK refuses getUserMedia unless the app
+/// answers the permission request, and WebView2 would otherwise ask the user
+/// itself. macOS keeps the window from the config.
+#[cfg(not(target_os = "macos"))]
+fn create_control_window(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    use tauri::webview::{PermissionKind, PermissionResponse};
+    let config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == "control")
+        .ok_or("no control window in the config")?;
+    tauri::WebviewWindowBuilder::from_config(app.handle(), config)?
+        .on_permission_request(|_, kind| match kind {
+            PermissionKind::Camera => PermissionResponse::Allow,
+            _ => PermissionResponse::Default,
+        })
+        .build()?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
-            let bus = Arc::new(SketchBus::new(data_dir.join("sessions")));
+            // Session images and recordings grow without bound, so they stay
+            // out of the roaming profile on Windows. On macOS and Linux this
+            // is the same directory as `data_dir`.
+            let local_dir = app.path().app_local_data_dir()?;
+            let bus = Arc::new(SketchBus::new(local_dir.join("sessions")));
             let settings_path = data_dir.join("settings.json");
-            let recordings_dir = data_dir.join("recordings");
+            let recordings_dir = local_dir.join("recordings");
             mcp_server::spawn(bus.clone(), settings::load(&settings_path).mcp_port);
             // Session changes come from the agent (start_session) as well as
             // from the window; agent reads only from the agent. The window
@@ -308,6 +334,8 @@ pub fn run() {
                 bus,
                 netcams: netcam::Registry::new(),
             });
+            #[cfg(not(target_os = "macos"))]
+            create_control_window(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

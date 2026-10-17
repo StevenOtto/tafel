@@ -1,30 +1,50 @@
-# Builds, signs and notarizes Tafel for a version tag (v0.2.0, ...) and
-# attaches the DMG to a GitHub release as Tafel.dmg, the stable name the
-# website's download button links to.
+# Builds Tafel for a version tag (v0.3.0, ...) on macOS, Windows and Linux,
+# then publishes one GitHub release with the stable names the website links
+# to: Tafel.dmg (signed and notarized), Tafel-Setup.exe (not signed yet),
+# Tafel.AppImage and Tafel.deb, plus SHA256SUMS.txt.
 # Needs the repository secrets listed in README → "Releases".
+# A pull request that changes this workflow or the Linux and Windows bundle
+# settings, or a manual run, builds the Windows and Linux packages as workflow
+# artifacts instead: nothing is signed or published.
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - src-tauri/tauri.linux.conf.json
+      - src-tauri/tauri.windows.conf.json
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  macos:
-    runs-on: macos-15
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.check.outputs.version }}
     steps:
       - uses: actions/checkout@v7
 
       - name: Check the tag matches the app version
+        id: check
         run: |
           version=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match tauri.conf.json version $version"
             exit 1
           fi
-          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  macos:
+    needs: version
+    if: github.event_name == 'push'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v7
         with:
@@ -82,13 +102,117 @@ jobs:
           xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_PASSWORD" --wait
           xcrun stapler staple "$dmg"
           spctl -a -vvv -t open --context context:primary-signature "$dmg"
-          cp "$dmg" "$RUNNER_TEMP/Tafel.dmg"
+          mkdir -p "$RUNNER_TEMP/release"
+          cp "$dmg" "$RUNNER_TEMP/release/Tafel.dmg"
 
-      - name: Publish the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/Tafel.dmg" --title "Tafel $VERSION" --generate-notes
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos
+          path: ${{ runner.temp }}/release/Tafel.dmg
+          if-no-files-found: error
 
       - name: Remove the keychain
         if: always()
         run: if [ -n "${KEYCHAIN:-}" ]; then security delete-keychain "$KEYCHAIN" || true; fi
+
+  # Built on the oldest supported Ubuntu so the packages run on as many
+  # distributions as possible.
+  linux:
+    needs: version
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # The AppImage bundles the GStreamer plugins installed here, so the
+      # V4L2 and PipeWire camera sources must be present; the bundler needs
+      # patchelf to relocate them.
+      - name: Install WebKitGTK, GStreamer and patchelf
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-pipewire
+
+      - run: npm ci
+      - run: npm run tauri build -- --bundles deb,appimage
+
+      - name: Collect the packages
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          cp src-tauri/target/release/bundle/appimage/*.AppImage "$RUNNER_TEMP/release/Tafel.AppImage"
+          cp src-tauri/target/release/bundle/deb/*.deb "$RUNNER_TEMP/release/Tafel.deb"
+          ls -la "$RUNNER_TEMP/release"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux
+          path: ${{ runner.temp }}/release/
+          if-no-files-found: error
+
+  windows:
+    needs: version
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+      - run: npm run tauri build -- --bundles nsis
+
+      - name: Collect the installer
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          cp src-tauri/target/release/bundle/nsis/*-setup.exe "$RUNNER_TEMP/release/Tafel-Setup.exe"
+          ls -la "$RUNNER_TEMP/release"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          path: ${{ runner.temp }}/release/Tafel-Setup.exe
+          if-no-files-found: error
+
+  publish:
+    needs: [version, macos, linux, windows]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Write checksums
+        working-directory: release
+        run: sha256sum Tafel.dmg Tafel-Setup.exe Tafel.AppImage Tafel.deb > SHA256SUMS.txt
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/Tafel.dmg release/Tafel-Setup.exe \
+            release/Tafel.AppImage release/Tafel.deb release/SHA256SUMS.txt \
+            --title "Tafel $VERSION" --generate-notes \
+            --notes "The Windows and Linux builds are a preview. The Windows installer is not signed yet: if Windows says it protected your PC, choose More info, then Run anyway."

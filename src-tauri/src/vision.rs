@@ -1,13 +1,20 @@
-//! Hand-pose detection through Apple Vision. The Swift side
-//! (swift/TafelVision) runs `VNDetectHumanHandPoseRequest` and hands back
-//! JSON; this module is the typed Rust face of that call. Everything stays
-//! on the machine.
+//! Hand-pose detection, on the machine. macOS runs Apple Vision through a
+//! Swift bridge (`apple`); Linux and Windows run MediaPipe's hand models in
+//! Rust (`landmarker`). Both return the same `Detection`, and classification
+//! happens in the webview. Nothing leaves the machine.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use swift_rs::{swift, SRData, SRString};
 
-swift!(fn tafel_detect_hands(image: &SRData) -> SRString);
+#[cfg(target_os = "macos")]
+mod apple;
+#[cfg(target_os = "macos")]
+pub use apple::detect_hands;
+
+#[cfg(not(target_os = "macos"))]
+mod landmarker;
+#[cfg(not(target_os = "macos"))]
+pub use landmarker::detect_hands;
 
 /// Frame-fraction coordinates, origin top-left.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -31,26 +38,15 @@ pub struct Detection {
     pub error: Option<String>,
 }
 
-/// Detects up to two hands in an encoded image (JPEG or PNG).
-pub fn detect_hands(image: &[u8]) -> Result<Detection, String> {
-    let data: SRData = image.into();
-    let json = unsafe { tafel_detect_hands(&data) };
-    let detection: Detection = serde_json::from_str(json.as_str()).map_err(|e| e.to_string())?;
-    match detection.error {
-        Some(error) => Err(error),
-        None => Ok(detection),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// A flat grey image has no hands; also proves the bridge round-trips.
+    /// A flat grey image has no hands; also proves the backend round-trips.
     #[test]
     fn blank_image_yields_no_hands() {
         let blank = include_bytes!("../fixtures/blank.png");
-        let detection = detect_hands(blank).expect("vision should accept a png");
+        let detection = detect_hands(blank).expect("the backend should accept a png");
         assert!(detection.hands.is_empty());
     }
 
@@ -63,7 +59,7 @@ mod tests {
             eprintln!("skipped: no hand photo at {}", path.display());
             return;
         };
-        let detection = detect_hands(&jpeg).expect("vision should accept a jpeg");
+        let detection = detect_hands(&jpeg).expect("the backend should accept a jpeg");
         assert!(!detection.hands.is_empty(), "expected a hand in {}", path.display());
         let hand = &detection.hands[0];
         assert_eq!(hand.points.len(), 21);

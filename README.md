@@ -5,12 +5,17 @@ cameras watch your desk and wall; you control each with hand gestures, and the
 snapshots you ask for are served to Claude over MCP, with an MCP App card
 rendering them inside the conversation.
 
-Hand detection uses Apple Vision on-device, there are no
-API keys, and the only network listener is a local MCP endpoint on
-`127.0.0.1`. The one outbound path is fetching frames from a network camera
-you add, and only ever to a host on your local network (loopback, private, or
-`.local`) — enforced in Rust; the app never reaches the public internet.
-macOS 12+ only.
+Hand detection runs on the machine: Apple Vision on macOS, and Google's
+MediaPipe hand models run in Rust on Linux and Windows (the models only, not
+MediaPipe's runtime, which reports usage to Google). There are no API keys,
+and the only network listener is a local MCP endpoint on `127.0.0.1`. The one
+outbound path is fetching frames from a network camera you add, and only ever
+to a host on your local network (loopback, private, or `.local`) — enforced
+in Rust; the app never reaches the public internet.
+
+Runs on macOS 12+. Linux and Windows builds are a preview, and the Windows
+installer is not signed yet; see `specs/2026-10-17-linux-and-windows.md` for
+what has been verified.
 
 See `DESIGN.md` for the architecture and `specs/` for the dated specs behind
 each change (on-device OCR was added in August and removed again in
@@ -83,9 +88,14 @@ as a network camera instead.
 
 ## Running
 
-- Dev: `npm install && npm run tauri dev` (Rust toolchain required).
+- Dev: `npm install && npm run tauri dev` (Rust toolchain required). On
+  Linux, install the WebKitGTK development packages first (on Debian and
+  Ubuntu: `libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev`); cameras also
+  need GStreamer's `gstreamer1.0-plugins-good`.
 - Build the app bundle: `npm run tauri build` → artifact at
-  `src-tauri/target/release/bundle/macos/Tafel.app` (plus a `.dmg`).
+  `src-tauri/target/release/bundle/macos/Tafel.app` (plus a `.dmg`). On
+  Linux it builds a `.deb` and an AppImage, on Windows an NSIS installer;
+  neither is signed yet.
 - Tests: `npm test` (TypeScript) and `cargo test` in `src-tauri/` (Rust).
   Both pass on a machine with no camera. The Rust build compiles the Swift
   bridge in `src-tauri/swift/TafelVision` (Xcode command line tools
@@ -113,13 +123,18 @@ as a network camera instead.
   (camera access), then notarizes and staples the app. Check with
   `spctl -a -vvv -t exec` on the app and `xcrun stapler validate` on app and DMG.
 
-- Releases: pushing a tag such as `v0.2.0` runs
-  `.github/workflows/release.yml` on a macOS runner. It checks the tag
-  matches the version in `src-tauri/tauri.conf.json`, signs and notarizes
-  the app and the DMG, and attaches the DMG to a GitHub release as
-  `Tafel.dmg`. Bump the version first, then tag:
-  `git tag v0.2.0 && git push origin v0.2.0`. The workflow needs these
-  repository secrets:
+- Releases: pushing a tag such as `v0.3.0` runs
+  `.github/workflows/release.yml`. It checks the tag matches the version in
+  `src-tauri/tauri.conf.json`, then builds on macOS, Windows and Linux
+  runners: the signed and notarized `Tafel.dmg`, an unsigned
+  `Tafel-Setup.exe`, and `Tafel.AppImage` and `Tafel.deb` (built on Ubuntu
+  22.04 for older distributions). Once all three succeed it publishes one
+  GitHub release with those files and `SHA256SUMS.txt`, under the stable
+  names the website links to. Pull requests that change the workflow or the
+  Linux and Windows bundle settings, and manual runs, build the Windows and
+  Linux packages as workflow artifacts without publishing. Bump the version
+  first, then tag: `git tag v0.3.0 && git push origin v0.3.0`. The workflow
+  needs these repository secrets, all for the macOS build:
 
   | Secret                       | Value                                                              |
   | ---------------------------- | ------------------------------------------------------------------ |
@@ -137,7 +152,10 @@ as a network camera instead.
   it with `python3 -m http.server --directory site` and open
   `http://localhost:8000`. `.github/workflows/pages.yml` deploys it to
   GitHub Pages on every push to `main` that touches `site/`. The
-  download button links to `releases/latest/download/Tafel.dmg`. Files in
+  download button links to `releases/latest/download/` plus the file name for
+  the visitor's system (macOS by default), and the install steps link every
+  file. Merge site changes that link new files only together with a release
+  that contains them. Files in
   `site/examples/` are agent-made example pages and media, kept as they
   were made.
 
@@ -156,7 +174,7 @@ precedes) is also said in the status line, as is the agent naming a session
 ("The agent named this session 'Kiosk'"). The same section states the deal
 in three sentences: while a camera is watching, a connected agent can look at
 your desk at any time and receives what you send; Pause stops both; sent
-snapshots stay on this Mac until you delete them.
+snapshots stay on this computer until you delete them.
 
 It also shows whether an agent is **listening** (a `wait_for_delivery` call is
 open) and what happened to the latest prompt: saved locally, delivered to the
@@ -228,7 +246,7 @@ Switch, name/rename and delete sessions from the **Session** menu above the
 delivery history in the app; deleting asks first and really removes the files.
 Open a delivery to see it large with its camera names, or to **Remove** it
 from the session (files included). Removing or deleting takes the files off
-this Mac; anything the agent already received stays in that conversation, and
+this computer; anything the agent already received stays in that conversation, and
 the confirmation says so.
 The agent can only start and name sessions. The panel shows where sessions are
 stored and how much space they take. Nothing is pruned automatically. Note the
@@ -244,9 +262,13 @@ their session.
   gesture → action table incl. the paused state.
 - `src/core/gesture.recorded.test.ts` replays every recording under
   `fixtures/gestures/` (see below) through the same classifier and tracker.
-- `src-tauri/src/vision.rs` runs Apple Vision on a blank image (0 hands), on
+- `src-tauri/src/vision.rs` runs the platform's hand detector (Apple Vision
+  on macOS, the Rust MediaPipe port elsewhere) on a blank image (0 hands), on
   garbage bytes (clean error) and — when you drop a photo at
   `src-tauri/fixtures/hand.jpg` — on a real hand (≥ 1 hand, 21 joints).
+  `src-tauri/src/vision/landmarker.rs` covers the port's anchors, crop
+  geometry, palm merging and image sampling. CI runs both suites on macOS,
+  Linux and Windows, with MediaPipe's public thumbs-up photo as the hand.
 - `src-tauri/src/settings.rs` proves the camera selection survives a restart
   and that a settings file from the earlier prototype-era app still loads.
 - `src-tauri/src/sessions.rs` covers the session rules on a temp dir: the

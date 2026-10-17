@@ -1,6 +1,6 @@
 /**
  * Typed bridge to the Rust core. The webview reports camera material into
- * the sketch bus, asks Vision for hand landmarks, persists settings, and
+ * the sketch bus, asks for hand landmarks, persists settings, and
  * manages sessions; nothing else crosses the boundary.
  */
 
@@ -47,7 +47,7 @@ export const reportFrame = (
 export const retireFrame = (cameraId: string): Promise<void> =>
   invoke("retire_frame", { cameraId });
 
-/** Hand landmarks for one frame, from Apple Vision on the Rust side. */
+/** Hand landmarks for one frame: Apple Vision on macOS, MediaPipe's models elsewhere. */
 export const detectHands = (jpegB64: string): Promise<Detection> =>
   invoke("detect_hands", { jpegB64 });
 

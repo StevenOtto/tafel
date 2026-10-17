@@ -41,7 +41,15 @@ only the first needs the machine:
    a 60-line Swift bridge (`src-tauri/swift/TafelVision`, linked through
    `swift-rs` from `build.rs`) that runs `VNDetectHumanHandPoseRequest` and
    returns up to two hands × 21 joints as JSON, y flipped to image
-   convention. On-device, offline, ~20–40 ms on Apple silicon.
+   convention. On-device, offline, ~20–40 ms on Apple silicon. On Linux and
+   Windows the same command runs a Rust port of MediaPipe's hand landmarker
+   (`src-tauri/src/vision/landmarker.rs`) over Google's two hand models,
+   converted to ONNX and run through rten: palm detection on the
+   letterboxed frame, a rotated crop around each palm, 21 joints from the
+   crop. Same joint names and coordinates, so stages 2 and 3 are shared;
+   MediaPipe scores the hand rather than each joint, so every joint carries
+   the hand-presence score. MediaPipe's own runtime is not used because it
+   reports usage to Google (`specs/2026-10-17-linux-and-windows.md`).
 2. **Gesture.** `src/core/hand.ts` classifies a hand from joint geometry
    only — every rule is a ratio against the palm length, so it is
    distance-invariant: `thumbs-up`, `open-palm`, `peace-sign` (index and

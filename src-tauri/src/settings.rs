@@ -39,6 +39,10 @@ pub struct Camera {
     pub rotation: u16,
     #[serde(default = "full_frame")]
     pub crop: Rect,
+    /// Set for a network camera, whose device id is also its URL; absent for
+    /// a local camera.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -121,6 +125,7 @@ mod tests {
             mirror,
             rotation: 0,
             crop: full_frame(),
+            url: None,
         }
     }
 
@@ -202,6 +207,26 @@ mod tests {
         settings.cameras[0].crop = Rect { x: 0.25, y: 0.1, width: 0.5, height: 0.6 };
         save(&path, &settings).unwrap();
         assert_eq!(load(&path).cameras[0], settings.cameras[0]);
+    }
+
+    /// A network camera is told apart by its URL, so the URL must survive a
+    /// save; a local camera's file keeps no url field at all.
+    #[test]
+    fn network_camera_url_survives_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let url = "http://192.168.1.20:8080/video";
+        let mut settings = Settings::default();
+        settings.cameras = vec![
+            Camera { url: Some(url.to_string()), ..camera(url, "Phone", false) },
+            camera("cam-overhead", "Desk", false),
+        ];
+        save(&path, &settings).unwrap();
+        let restarted = load(&path);
+        assert_eq!(restarted.cameras[0].url.as_deref(), Some(url));
+        assert_eq!(restarted.cameras[1].url, None);
+        let raw = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(raw.matches("\"url\"").count(), 1);
     }
 
     #[test]

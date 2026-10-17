@@ -12,7 +12,7 @@ import {
   fitWithin,
 } from "../core/cameraSet";
 
-/** Longest side of the frame handed to Vision; plenty for hand pose. */
+/** Longest side of the frame handed to the hand detector; plenty for hand pose. */
 export const DETECTION_MAX_WIDTH = 640;
 
 /** The frame's size after a clockwise rotation. */

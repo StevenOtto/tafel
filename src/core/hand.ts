@@ -1,5 +1,6 @@
 /**
- * Hand landmarks → gesture. Pure geometry over Vision's 21 joints, no model:
+ * Hand landmarks → gesture. Pure geometry over the 21 hand joints (from
+ * Apple Vision on macOS, MediaPipe's models elsewhere), no trained classifier:
  * every rule is a ratio against the palm length so it is independent of
  * camera distance, and every rule is testable with synthetic landmark sets.
  */

@@ -1,8 +1,12 @@
+#[cfg(target_os = "macos")]
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "macos")]
 use std::process::Command;
+#[cfg(target_os = "macos")]
 use swift_rs::SwiftLinker;
 
 /// swift-rs runtime helpers the `swift-rs` crate links against.
+#[cfg(target_os = "macos")]
 const SWIFT_RS_HELPERS: [&str; 4] = [
     "_data_from_bytes",
     "_retain_object",
@@ -11,6 +15,18 @@ const SWIFT_RS_HELPERS: [&str; 4] = [
 ];
 
 fn main() {
+    // The Swift bridge to Apple Vision is macOS-only; other platforms run the
+    // hand models in Rust (src/vision/landmarker.rs). swift-rs is not even a
+    // build dependency there: MSVC refuses to link it without the Swift
+    // runtime. Build scripts see the host's cfg, which is the target's
+    // because Tafel is not cross-compiled.
+    #[cfg(target_os = "macos")]
+    link_swift_bridge();
+    tauri_build::build()
+}
+
+#[cfg(target_os = "macos")]
+fn link_swift_bridge() {
     // Must match `minimumSystemVersion` in tauri.conf.json and the platform
     // in swift/TafelVision/Package.swift.
     SwiftLinker::new("12.0")
@@ -20,13 +36,13 @@ fn main() {
     println!("cargo:rustc-link-lib=framework=Vision");
     println!("cargo:rerun-if-changed=swift/TafelVision/Sources");
     println!("cargo:rerun-if-changed=swift/TafelVision/Package.swift");
-    tauri_build::build()
 }
 
 /// Xcode 27 release builds make swift-rs's own @_cdecl helpers local in the
 /// static library, so the release binary fails to link. swift-rs 1.0.8 only
 /// re-exports the package's own symbols; promote its helpers here too.
 /// Remove once swift-rs handles this itself.
+#[cfg(target_os = "macos")]
 fn globalize_swift_rs_helpers() {
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR is set"));
     let archives = find_archives(&out_dir.join("swift-rs/TafelVision"), "libTafelVision.a");
@@ -60,6 +76,7 @@ fn globalize_swift_rs_helpers() {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn find_archives(dir: &Path, file_name: &str) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
@@ -79,6 +96,7 @@ fn find_archives(dir: &Path, file_name: &str) -> Vec<PathBuf> {
         .collect()
 }
 
+#[cfg(target_os = "macos")]
 fn llvm_objcopy() -> Option<PathBuf> {
     let sysroot = Command::new("rustc")
         .args(["--print", "sysroot"])

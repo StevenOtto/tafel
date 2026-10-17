@@ -44,6 +44,7 @@ import {
   openCollection,
 } from "../core/delivery";
 import { Gesture, Hand } from "../core/hand";
+import { platformFromUserAgent } from "../core/platform";
 import {
   Session,
   byRecentActivity,
@@ -113,6 +114,9 @@ const GUIDE: readonly {
 ];
 
 const NO_GESTURES: readonly Gesture[] = [];
+
+/** Continuity Camera exists only on macOS; elsewhere the hints leave it out. */
+const ON_MAC = platformFromUserAgent(navigator.userAgent) === "macos";
 
 /** The inline name field: naming the current session, or starting a new one. */
 interface SessionDraft {
@@ -977,9 +981,13 @@ export const ControlApp = (): React.JSX.Element => {
             <div className="control__empty">
               <p>No cameras yet.</p>
               <p className="control__hint">
-                {available.length > 0
-                  ? "Add one from the menu above — your desk, a wall camera, an iPhone via Continuity Camera."
-                  : "Connect a camera (or an iPhone via Continuity Camera) to begin."}
+                {ON_MAC
+                  ? available.length > 0
+                    ? "Add one from the menu above — your desk, a wall camera, an iPhone via Continuity Camera."
+                    : "Connect a camera (or an iPhone via Continuity Camera) to begin."
+                  : available.length > 0
+                    ? "Add one from the menu above."
+                    : "Connect a camera to begin."}
               </p>
             </div>
           ) : (
@@ -1128,8 +1136,8 @@ export const ControlApp = (): React.JSX.Element => {
               While a camera is watching, a connected agent can look at your
               desk at any time. Sent prompts wait locally until an agent reads
               them. Pause stops new capture and listening; work already started
-              continues. Sent snapshots stay on this Mac, in sessions, until you
-              delete them.
+              continues. Sent snapshots stay on this computer, in sessions,
+              until you delete them.
             </p>
 
             <details className="control__dev">
@@ -1323,7 +1331,7 @@ export const ControlApp = (): React.JSX.Element => {
                     onClick={() =>
                       setConfirm({
                         title: `Delete “${sessionLabel(currentSession)}”?`,
-                        message: `${deliveryCountPhrase(currentSession.deliveryCount)} will be removed from this Mac. Anything the agent already received stays in that conversation. This cannot be undone.`,
+                        message: `${deliveryCountPhrase(currentSession.deliveryCount)} will be removed from this computer. Anything the agent already received stays in that conversation. This cannot be undone.`,
                         confirmLabel: "Delete",
                         onConfirm: () => void removeSession(),
                       })
@@ -1442,7 +1450,7 @@ export const ControlApp = (): React.JSX.Element => {
                     setConfirm({
                       title: `Remove delivery #${openRecord.seq}?`,
                       message:
-                        "Its images are removed from this Mac. Anything the agent already received stays in that conversation. This cannot be undone.",
+                        "Its images are removed from this computer. Anything the agent already received stays in that conversation. This cannot be undone.",
                       confirmLabel: "Remove",
                       onConfirm: () => void removeDelivery(openRecord.seq),
                     })

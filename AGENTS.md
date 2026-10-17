@@ -1,17 +1,24 @@
 # Tafel
 
-macOS desktop app that turns desk-camera images into visual input for agents.
-Hand gestures trigger deliveries; a local MCP server serves them. Sessions
-persist images on this Mac. OCR and the earlier UI-generation pipeline were
-removed; do not infer current features from their historical specs.
+Desktop app (macOS; Linux and Windows builds are a preview) that
+turns desk-camera images into visual input for agents. Hand gestures trigger
+deliveries; a local MCP server serves them. Sessions persist images on this
+computer. OCR and the earlier UI-generation pipeline were removed; do not
+infer current features from their historical specs.
 
 ## Stack and commands
 
 - React 19, strict TypeScript 5.8, Vite 7, plain CSS, Vitest, npm lockfile.
-- Tauri 2 / Rust, with a Swift bridge to Apple Vision for hand landmarks.
-- Full app requires macOS 12+, Rust, and Xcode command line tools. The first
-  native build may fetch SwiftPM dependencies. With Xcode 27, release builds
-  also need `rustup component add llvm-tools` (see `src-tauri/build.rs`).
+- Tauri 2 / Rust. Hand landmarks come from a Swift bridge to Apple Vision on
+  macOS, and from MediaPipe's hand models run through rten on Linux and
+  Windows (`src-tauri/models/`).
+- The macOS app requires macOS 12+, Rust, and Xcode command line tools. The
+  first native build may fetch SwiftPM dependencies. Linux builds need the
+  WebKitGTK development packages (see README); real cameras there also need
+  GStreamer's `gstreamer1.0-plugins-good`. Linux and Windows override the
+  window and bundle settings in `src-tauri/tauri.<os>.conf.json`. With
+  Xcode 27, release builds also need `rustup component add llvm-tools` (see
+  `src-tauri/build.rs`).
   After an Xcode upgrade, `cargo clean -p tafel` (add `--release` for the
   release profile) clears build output that points at the old clang.
 
@@ -30,9 +37,11 @@ Run from the repository root unless stated otherwise:
 | Check formatting of changed supported files | `npx prettier --check <files>`                    |
 
 There is no lint script. `npm run format` rewrites the whole repository;
-prefer formatting only changed files. Tests do not need a camera, but native
-compilation needs macOS. Real camera, gesture, and MCP-host behavior also
-needs runtime verification; distinguish that from automated test results.
+prefer formatting only changed files. Tests do not need a camera. Native
+tests exercise only the current OS's hand detector, so CI
+(`.github/workflows/ci.yml`) runs them on macOS, Linux and Windows. Real
+camera, gesture, and MCP-host behavior also needs runtime verification;
+distinguish that from automated test results.
 
 ## Load context selectively
 
@@ -50,7 +59,7 @@ sections of `README.md`, `DESIGN.md`, and dated `specs/`.
 | Delivery bus and persistent sessions                      | `src-tauri/src/bus.rs`, `src-tauri/src/sessions.rs`                                                                     |
 | MCP tools and transport                                   | `src-tauri/src/mcp_server.rs`                                                                                           |
 | Network camera readers and URL checks                     | `src-tauri/src/netcam.rs`                                                                                               |
-| Vision bridge                                             | `src-tauri/src/vision.rs`, `src-tauri/swift/TafelVision/Sources/TafelVision/HandPose.swift`                             |
+| Hand detection (Apple Vision, MediaPipe port)             | `src-tauri/src/vision.rs`, `src-tauri/src/vision/`, `src-tauri/swift/TafelVision/Sources/TafelVision/HandPose.swift`    |
 | Settings and app permissions                              | `src-tauri/src/settings.rs`, `src-tauri/tauri.conf.json`, `src-tauri/Info.plist`, `src-tauri/capabilities/default.json` |
 | Styling and accessible dialog example                     | `src/styles.css`, `src/app/ConfirmDialog.tsx`                                                                           |
 | Embedded MCP card                                         | `src-tauri/mcp-app/README.md`, `src-tauri/mcp-app/delivery.html`                                                        |
@@ -92,6 +101,9 @@ surface unresolved conflicts before changing behavior.
   output, or unrelated changes. The desk photos in `site/examples/` were chosen
   by the user for publication; ask before adding others. Do not widen network access or restore
   removed cloud/OCR pipelines as incidental cleanup.
+- Do not use MediaPipe's own runtime (the `mediapipe` packages or their
+  prebuilt library): it reports usage metrics to Google. Use the converted
+  models in `src-tauri/models/` instead.
 
 ## Verification and handoff
 

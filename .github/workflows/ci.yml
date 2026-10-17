@@ -1,0 +1,52 @@
+# Tests, type check and native build on every platform Tafel runs on. Hand
+# detection differs per OS (Apple Vision on macOS, MediaPipe's models through
+# rten on Linux and Windows), so the Rust tests run natively on each.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install WebKitGTK
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev
+
+      - run: npm ci
+      - run: npm test
+      # Type checks and writes dist/, which the Rust build embeds.
+      - run: npm run build
+
+      # MediaPipe's public thumbs-up test photo, so the Linux and Windows hand
+      # test runs on a real hand instead of skipping.
+      - name: Fetch a hand photo
+        if: runner.os != 'macOS'
+        shell: bash
+        run: |
+          curl -fsSL -o src-tauri/fixtures/hand.jpg https://storage.googleapis.com/mediapipe-assets/thumb_up.jpg
+          echo "5d673c081ab13b8a1812269ff57047066f9c33c07db5f4178089e8cb3fdc0291  src-tauri/fixtures/hand.jpg" | sha256sum -c
+
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
