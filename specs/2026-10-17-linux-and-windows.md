@@ -303,6 +303,10 @@ it never reaches the public internet, so the user chose option B.
   `fixtures/hand.jpg`, so the hand test runs on a real hand.
 - **Docs.** README, DESIGN.md, and AGENTS.md, which gains a boundary: do not
   use MediaPipe's runtime.
+- **Site.** `site/index.html` says Windows and Linux are in testing (hero
+  fine print, link-preview description, FAQ) and "your computer" where it
+  said "your Mac". The download stays macOS-only until releases include
+  other platforms; the site deploys only when this reaches `main`.
 
 ## Verification of the implementation (Linux, this container)
 
@@ -355,6 +359,8 @@ when nothing calls them, so `swift-rs` is now a macOS-only build dependency.
   triggers from pen grips now that joints carry no confidence of their own.
 - CPU load with two or three cameras at 10 fps on typical laptops.
 - Whether the Linux Claude Desktop beta renders the MCP card.
+- Before a Windows or Linux release: the site's FAQ says up to four cameras
+  run smoothly, which was measured on a Mac with Vision.
 
 ## Found along the way, not fixed here
 
